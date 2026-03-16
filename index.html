@@ -1,0 +1,399 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Tap Frenzy</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      background: #0f0f1a;
+      color: #fff;
+      font-family: 'Segoe UI', sans-serif;
+      height: 100dvh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      overflow: hidden;
+      touch-action: none;
+    }
+
+    #hud {
+      width: 100%;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 16px 24px;
+      font-size: 1.1rem;
+      z-index: 10;
+    }
+
+    #score-label { font-size: 0.75rem; opacity: 0.6; text-transform: uppercase; letter-spacing: 1px; }
+    #score { font-size: 2.5rem; font-weight: 700; line-height: 1; }
+
+    #timer-wrap {
+      text-align: right;
+    }
+    #timer-label { font-size: 0.75rem; opacity: 0.6; text-transform: uppercase; letter-spacing: 1px; }
+    #timer {
+      font-size: 2.5rem;
+      font-weight: 700;
+      line-height: 1;
+      color: #7fff7f;
+      transition: color 0.3s;
+    }
+    #timer.urgent { color: #ff4444; animation: pulse 0.5s infinite alternate; }
+
+    @keyframes pulse { from { opacity: 1; } to { opacity: 0.4; } }
+
+    #arena {
+      flex: 1;
+      width: 100%;
+      position: relative;
+    }
+
+    .target {
+      position: absolute;
+      border-radius: 50%;
+      cursor: pointer;
+      transform: scale(0);
+      animation: pop-in 0.15s forwards;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.4rem;
+      user-select: none;
+      box-shadow: 0 0 20px rgba(255,255,255,0.2);
+    }
+
+    @keyframes pop-in {
+      to { transform: scale(1); }
+    }
+
+    .target.shrinking {
+      animation: shrink-out 0.3s forwards;
+    }
+
+    @keyframes shrink-out {
+      to { transform: scale(0); opacity: 0; }
+    }
+
+    .tap-fx {
+      position: absolute;
+      width: 60px;
+      height: 60px;
+      border-radius: 50%;
+      border: 3px solid rgba(255,255,255,0.8);
+      pointer-events: none;
+      transform: translate(-50%, -50%) scale(0);
+      animation: ripple 0.4s ease-out forwards;
+    }
+
+    @keyframes ripple {
+      to { transform: translate(-50%, -50%) scale(2.5); opacity: 0; }
+    }
+
+    .score-pop {
+      position: absolute;
+      font-weight: 700;
+      font-size: 1.2rem;
+      color: #fff;
+      pointer-events: none;
+      transform: translate(-50%, -50%);
+      animation: float-up 0.6s ease-out forwards;
+    }
+
+    @keyframes float-up {
+      to { transform: translate(-50%, -120%); opacity: 0; }
+    }
+
+    /* Overlay screens */
+    .screen {
+      position: fixed;
+      inset: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 20px;
+      background: rgba(15,15,26,0.95);
+      z-index: 100;
+      text-align: center;
+      padding: 24px;
+    }
+
+    .screen h1 {
+      font-size: 3rem;
+      font-weight: 800;
+      background: linear-gradient(135deg, #a78bfa, #38bdf8);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .screen p { opacity: 0.7; font-size: 1rem; max-width: 280px; line-height: 1.5; }
+
+    .btn {
+      margin-top: 12px;
+      padding: 16px 40px;
+      font-size: 1.2rem;
+      font-weight: 700;
+      border: none;
+      border-radius: 50px;
+      background: linear-gradient(135deg, #a78bfa, #38bdf8);
+      color: #0f0f1a;
+      cursor: pointer;
+      transition: transform 0.1s, box-shadow 0.1s;
+      box-shadow: 0 0 30px rgba(167,139,250,0.5);
+    }
+
+    .btn:active { transform: scale(0.95); }
+
+    #result-score {
+      font-size: 4rem;
+      font-weight: 800;
+      color: #fff;
+    }
+
+    #combo-bar-wrap {
+      width: 90%;
+      height: 6px;
+      background: rgba(255,255,255,0.1);
+      border-radius: 10px;
+      margin: 0 auto;
+    }
+
+    #combo-bar {
+      height: 100%;
+      border-radius: 10px;
+      background: linear-gradient(90deg, #a78bfa, #38bdf8);
+      width: 0%;
+      transition: width 0.3s;
+    }
+
+    #combo-label {
+      text-align: center;
+      font-size: 0.75rem;
+      opacity: 0.5;
+      letter-spacing: 1px;
+      text-transform: uppercase;
+      margin-top: 4px;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Start screen -->
+  <div class="screen" id="start-screen">
+    <h1>Tap Frenzy</h1>
+    <p>Tap the circles as fast as you can before they disappear! Build combos for bonus points.</p>
+    <button class="btn" id="start-btn">Play</button>
+  </div>
+
+  <!-- Game over screen -->
+  <div class="screen" id="end-screen" style="display:none">
+    <h1>Time's Up!</h1>
+    <div id="result-score">0</div>
+    <p id="result-msg"></p>
+    <button class="btn" id="restart-btn">Play Again</button>
+  </div>
+
+  <!-- HUD -->
+  <div id="hud">
+    <div>
+      <div id="score-label">Score</div>
+      <div id="score">0</div>
+    </div>
+    <div id="timer-wrap">
+      <div id="timer-label">Time</div>
+      <div id="timer">30</div>
+    </div>
+  </div>
+
+  <div id="combo-bar-wrap">
+    <div id="combo-bar"></div>
+  </div>
+  <div id="combo-label">Combo x1</div>
+
+  <div id="arena"></div>
+
+<script>
+  const GAME_DURATION = 30;
+  const COLORS = [
+    ['#f472b6','#ec4899'],
+    ['#a78bfa','#7c3aed'],
+    ['#38bdf8','#0284c7'],
+    ['#4ade80','#16a34a'],
+    ['#fb923c','#ea580c'],
+    ['#fbbf24','#d97706'],
+  ];
+  const EMOJIS = ['🎯','⭐','💥','✨','🔥','💎','🎪'];
+
+  let score = 0, timeLeft = GAME_DURATION, running = false;
+  let combo = 1, comboMax = 5, comboTimer = null;
+  let spawnTimer = null, countdownTimer = null;
+  let targets = [];
+
+  const arena = document.getElementById('arena');
+  const scoreEl = document.getElementById('score');
+  const timerEl = document.getElementById('timer');
+  const comboBar = document.getElementById('combo-bar');
+  const comboLabel = document.getElementById('combo-label');
+
+  function startGame() {
+    score = 0; timeLeft = GAME_DURATION; combo = 1;
+    updateScore(); updateTimer(); updateCombo();
+    targets.forEach(t => t.el.remove());
+    targets = [];
+    running = true;
+
+    document.getElementById('start-screen').style.display = 'none';
+    document.getElementById('end-screen').style.display = 'none';
+
+    spawnLoop();
+    countdownTimer = setInterval(() => {
+      timeLeft--;
+      updateTimer();
+      if (timeLeft <= 0) endGame();
+    }, 1000);
+  }
+
+  function endGame() {
+    running = false;
+    clearInterval(countdownTimer);
+    clearTimeout(spawnTimer);
+    targets.forEach(t => { clearTimeout(t.expireTimer); t.el.remove(); });
+    targets = [];
+
+    const msgs = [
+      [0, "Keep practicing! 💪"],
+      [30, "Not bad! 👍"],
+      [60, "Nice work! 🎯"],
+      [100, "Great reflexes! ⚡"],
+      [150, "Amazing! 🔥"],
+      [200, "Unbelievable! 💎"],
+    ];
+    let msg = msgs[0][1];
+    for (const [threshold, text] of msgs) {
+      if (score >= threshold) msg = text;
+    }
+
+    document.getElementById('result-score').textContent = score;
+    document.getElementById('result-msg').textContent = msg;
+    document.getElementById('end-screen').style.display = 'flex';
+  }
+
+  function spawnLoop() {
+    if (!running) return;
+    spawnTarget();
+    // Increase speed as time runs out
+    const elapsed = GAME_DURATION - timeLeft;
+    const delay = Math.max(400, 900 - elapsed * 15);
+    spawnTimer = setTimeout(spawnLoop, delay);
+  }
+
+  function spawnTarget() {
+    const rect = arena.getBoundingClientRect();
+    const size = Math.floor(Math.random() * 30 + 50); // 50-80px
+    const x = Math.random() * (rect.width - size);
+    const y = Math.random() * (rect.height - size);
+    const life = Math.max(800, 1800 - (GAME_DURATION - timeLeft) * 20);
+    const [c1, c2] = COLORS[Math.floor(Math.random() * COLORS.length)];
+    const emoji = EMOJIS[Math.floor(Math.random() * EMOJIS.length)];
+
+    const el = document.createElement('div');
+    el.className = 'target';
+    el.style.cssText = `
+      width:${size}px; height:${size}px;
+      left:${x}px; top:${y}px;
+      background: radial-gradient(circle at 35% 35%, ${c1}, ${c2});
+    `;
+    el.textContent = emoji;
+
+    const id = Date.now() + Math.random();
+    const t = { id, el, expireTimer: null };
+
+    el.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      tapTarget(t, e.clientX, e.clientY);
+    });
+
+    t.expireTimer = setTimeout(() => {
+      missTarget(t);
+    }, life);
+
+    targets.push(t);
+    arena.appendChild(el);
+  }
+
+  function tapTarget(t, cx, cy) {
+    if (!running) return;
+    clearTimeout(t.expireTimer);
+    targets = targets.filter(x => x.id !== t.id);
+
+    const pts = 10 * combo;
+    score += pts;
+    updateScore();
+
+    // Bump combo
+    combo = Math.min(combo + 1, comboMax);
+    resetComboTimer();
+    updateCombo();
+
+    // Ripple effect
+    const fx = document.createElement('div');
+    fx.className = 'tap-fx';
+    fx.style.left = cx + 'px';
+    fx.style.top = (cy - arena.getBoundingClientRect().top) + 'px';
+    arena.appendChild(fx);
+    fx.addEventListener('animationend', () => fx.remove());
+
+    // Score pop
+    const pop = document.createElement('div');
+    pop.className = 'score-pop';
+    pop.textContent = `+${pts}`;
+    pop.style.left = cx + 'px';
+    pop.style.top = (cy - arena.getBoundingClientRect().top) + 'px';
+    arena.appendChild(pop);
+    pop.addEventListener('animationend', () => pop.remove());
+
+    t.el.classList.add('shrinking');
+    t.el.addEventListener('animationend', () => t.el.remove(), { once: true });
+  }
+
+  function missTarget(t) {
+    targets = targets.filter(x => x.id !== t.id);
+    combo = 1;
+    updateCombo();
+    t.el.classList.add('shrinking');
+    t.el.addEventListener('animationend', () => t.el.remove(), { once: true });
+  }
+
+  function resetComboTimer() {
+    clearTimeout(comboTimer);
+    comboTimer = setTimeout(() => {
+      combo = 1;
+      updateCombo();
+    }, 2000);
+  }
+
+  function updateScore() {
+    scoreEl.textContent = score;
+  }
+
+  function updateTimer() {
+    timerEl.textContent = timeLeft;
+    timerEl.classList.toggle('urgent', timeLeft <= 5);
+  }
+
+  function updateCombo() {
+    const pct = ((combo - 1) / (comboMax - 1)) * 100;
+    comboBar.style.width = pct + '%';
+    comboLabel.textContent = `Combo x${combo}`;
+  }
+
+  document.getElementById('start-btn').addEventListener('click', startGame);
+  document.getElementById('restart-btn').addEventListener('click', startGame);
+</script>
+</body>
+</html>
